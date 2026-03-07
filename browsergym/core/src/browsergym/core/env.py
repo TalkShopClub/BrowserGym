@@ -639,7 +639,21 @@ document.addEventListener("visibilitychange", () => {
                 dom = extract_dom_snapshot(self.page)
                 axtree = extract_merged_axtree(self.page)
                 focused_element_bid = extract_focused_element_bid(self.page)
-                scale_factor = getattr(self.page, "_bgym_scale_factor", 1.0)
+
+                # DOMSnapshot.captureSnapshot returns layout bounds in device (physical)
+                # pixels, which differ from CSS pixels on HiDPI displays (e.g. 2x on
+                # macOS Retina). Compute the physical-to-CSS ratio from the root
+                # document node's width vs the CSS viewport width so that downstream
+                # bbox consumers (SOM overlay, coordinate actions) get CSS-pixel coords
+                # that match the screenshot captured at CSS resolution.
+                bgym_scale = getattr(self.page, "_bgym_scale_factor", 1.0)
+                viewport = self.page.viewport_size
+                root_bounds = dom["documents"][0]["layout"]["bounds"]
+                if root_bounds and viewport and root_bounds[0][2] > 0:
+                    physical_to_css = viewport["width"] / root_bounds[0][2]
+                else:
+                    physical_to_css = 1.0
+                scale_factor = bgym_scale * physical_to_css
                 extra_properties = extract_dom_extra_properties(dom, scale_factor=scale_factor)
             except (playwright.sync_api.Error, MarkingError) as e:
                 err_msg = str(e)
