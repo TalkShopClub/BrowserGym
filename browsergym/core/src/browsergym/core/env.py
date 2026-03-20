@@ -487,6 +487,14 @@ document.addEventListener("visibilitychange", () => {
         # wait a bit (for the JavaScript callback to set the active page)
         logger.debug(f"Waiting {self.pre_observation_delay} seconds before extracting observation")
         time.sleep(self.pre_observation_delay)  # wait for JS events to be fired
+        # Wait for any newly-opened pages to reach load state so _activate_page_from_js
+        # fires deterministically before we flush the callback queue.
+        for _p in list(self.context.pages):
+            if _p != self.page:
+                try:
+                    _p.wait_for_load_state("load", timeout=5000)
+                except Exception:
+                    pass
         self.context.cookies()  # trigger all waiting Playwright callbacks on the stack (hack, see https://playwright.dev/java/docs/multithreading)
 
         # wait for the network to idle before extracting the observation, reward etc.
