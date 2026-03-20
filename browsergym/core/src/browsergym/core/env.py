@@ -496,6 +496,11 @@ document.addEventListener("visibilitychange", () => {
                 except Exception:
                     pass
         self.context.cookies()  # trigger all waiting Playwright callbacks on the stack (hack, see https://playwright.dev/java/docs/multithreading)
+        # Snapshot the active page now — this is the legitimate page after the action's
+        # callbacks have been flushed. _wait_dom_loaded() and _task_validate() process
+        # events from all pages/frames which can spuriously re-activate background tabs
+        # via _activate_page_from_js. We restore to this snapshot before _get_obs().
+        _settled_page = self.page
 
         # wait for the network to idle before extracting the observation, reward etc.
         self._wait_dom_loaded()
@@ -532,6 +537,12 @@ document.addEventListener("visibilitychange", () => {
         # add any user message sent by the task to the chat
         if user_message:
             self.chat.add_message(role="user", msg=user_message)
+
+        # Restore the page that was active after the action's callbacks settled.
+        # _wait_dom_loaded() and _task_validate() may have spuriously switched
+        # self.page via background frame events from other tabs.
+        if _settled_page in self.context.pages and not _settled_page.is_closed():
+            self.page = _settled_page
 
         # extract observation (generic)
         obs = self._get_obs()
